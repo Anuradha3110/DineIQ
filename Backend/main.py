@@ -141,6 +141,81 @@ def _seed_accounts():
             print(f"✅ Seeded staff account for phone {phone} ({role})")
 
 
+def _seed_demo_data():
+    """
+    Optional demo data (menu, customers, orders, reviews) for a fresh
+    deploy with SEED_DEMO_DATA set, so the admin dashboard isn't blank.
+    No-ops if the menu table already has rows.
+    """
+    if not os.getenv("SEED_DEMO_DATA"):
+        return
+
+    import time
+    from services.dependencies import sqlite_db
+
+    if sqlite_db.fetch_one("SELECT 1 FROM menu LIMIT 1"):
+        return
+
+    now = time.strftime("%d/%m/%Y %H:%M:%S")
+
+    menu_items = [
+        ("Item_0001", "Paneer Tikka", "Starters", 350, "Grilled cottage cheese marinated in spiced yogurt"),
+        ("Item_0002", "Chicken Biryani", "Mains", 450, "Fragrant basmati rice layered with spiced chicken"),
+        ("Item_0003", "Butter Naan", "Sides", 60, "Soft leavened bread brushed with butter"),
+        ("Item_0004", "Gulab Jamun", "Desserts", 120, "Fried milk dumplings soaked in sugar syrup"),
+        ("Item_0005", "Mango Lassi", "Beverages", 150, "Chilled yogurt drink blended with mango"),
+        ("Item_0006", "Dal Makhani", "Mains", 280, "Slow-cooked black lentils in a creamy tomato gravy"),
+    ]
+    for item_id, name, category, price, desc in menu_items:
+        sqlite_db.insert("menu", {
+            "item_id": item_id, "name": name, "category": category,
+            "base_price": price, "low_cap_price": price, "high_cap_price": price,
+            "current_price": price, "description": desc, "is_active": 1,
+        })
+
+    customers = [
+        ("Cust_0001", "Priya Sharma", "priya.sharma@example.com", "9123456780", "Regular"),
+        ("Cust_0002", "Rahul Verma", "rahul.verma@example.com", "9123456781", "New"),
+        ("Cust_0003", "Sneha Iyer", "sneha.iyer@example.com", "9123456782", "VIP"),
+    ]
+    for cust_id, name, email, phone, category in customers:
+        sqlite_db.insert("customers", {
+            "customer_id": cust_id, "name": name, "email": email, "phone": phone,
+            "customer_category": category, "created_at": now, "last_login": now,
+        })
+
+    orders = [
+        ("Ord_0001", "Cust_0001", "COMPLETED", [("Item_0002", 1, 450), ("Item_0003", 2, 60)]),
+        ("Ord_0002", "Cust_0002", "PENDING", [("Item_0001", 1, 350), ("Item_0005", 1, 150)]),
+    ]
+    for order_id, cust_id, status, items in orders:
+        total = sum(qty * price for _, qty, price in items)
+        sqlite_db.insert("orders", {
+            "order_id": order_id, "customer_id": cust_id, "order_price": total,
+            "created_at": now, "status": status, "table_number": 1, "instructions": "",
+        })
+        for idx, (item_id, qty, price) in enumerate(items, start=1):
+            sqlite_db.insert("order_items", {
+                "order_item_id": f"{order_id}_Item_{idx:04d}", "order_id": order_id,
+                "item_id": item_id, "quantity": qty, "price": price,
+                "status": "PENDING", "special_instructions": "",
+            })
+
+    reviews = [
+        ("Rev_0001", "Cust_0001", 5, 5, 5, 5, 5, "Amazing food and quick service!"),
+        ("Rev_0002", "Cust_0003", 4, 4, 5, 4, 4, "Great ambience, will visit again."),
+    ]
+    for review_id, cust_id, food, service, clean, value, overall, comment in reviews:
+        sqlite_db.insert("reviews", {
+            "review_id": review_id, "customer_id": cust_id, "review_datetime": now,
+            "food_quality": food, "service": service, "cleanliness": clean,
+            "value_for_money": value, "overall_experience": overall, "comments": comment,
+            "review_type": "General", "urgency": "LOW", "status": "NEW",
+        })
+
+    print("✅ Seeded demo data: 6 menu items, 3 customers, 2 orders, 2 reviews")
+
+
 @app.on_event("startup")
 async def startup_event():
     import asyncio
@@ -149,6 +224,7 @@ async def startup_event():
     asyncio.create_task(start_progressive_sync())
 
     _seed_accounts()
+    _seed_demo_data()
 
 # ---------------------------------------------------------
 # Health Check

@@ -180,6 +180,29 @@ CREATE INDEX idx_orders_customer ON orders(customer_id);
 CREATE INDEX idx_order_items_order ON order_items(order_id);
 
 -- ======================
+-- MASTER (OWNER/SUPERADMIN) USERS
+-- ======================
+CREATE TABLE IF NOT EXISTS master (
+    master_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE,
+    phone TEXT UNIQUE,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    last_login TEXT
+);
+
+-- ======================
+-- MASTER AUTH
+-- ======================
+CREATE TABLE IF NOT EXISTS master_auth (
+    master_id TEXT PRIMARY KEY,
+    otp_hash TEXT,
+    otp_expires_at TEXT,
+    FOREIGN KEY (master_id) REFERENCES master(master_id)
+);
+
+-- ======================
 -- STAFF / DASHBOARD USERS
 -- ======================
 CREATE TABLE IF NOT EXISTS staff (

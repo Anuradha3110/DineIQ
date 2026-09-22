@@ -4,7 +4,7 @@
 # ---------------------------------------------------------
 
 # CRITICAL: Import startup FIRST to decode credentials before any other imports
-# import startup  # This decodes Base64 credentials if on Render
+import startup  # Decodes SERVICE_ACCOUNT_JSON_BASE64 into a real file if on Vercel/Render
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

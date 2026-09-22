@@ -4,10 +4,24 @@
 # Library and Packages Import
 # ---------------------------------------------------------
 import os
+import socket
 import smtplib
 import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+
+
+class _IPv4SMTP_SSL(smtplib.SMTP_SSL):
+    """
+    Some hosts (Render included) resolve smtp.gmail.com to an IPv6 address
+    they have no outbound route for, failing with
+    "[Errno 101] Network is unreachable". Force IPv4 resolution instead.
+    """
+    def _get_socket(self, host, port, timeout):
+        addr_info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+        ip = addr_info[0][4][0]
+        new_socket = socket.create_connection((ip, port), timeout, self.source_address)
+        return self.context.wrap_socket(new_socket, server_hostname=host)
 
 # ---------------------------------------------------------
 # Load environment variables from .env file
@@ -70,7 +84,7 @@ class GmailClient:
             context = ssl.create_default_context()
             
             # Connect to Gmail SMTP server
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+            with _IPv4SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
                 server.login(self.gmail_user, self.gmail_app_password)
                 server.sendmail(self.gmail_user, to_email, msg.as_string())
                 

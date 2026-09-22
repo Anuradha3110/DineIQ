@@ -90,32 +90,55 @@ app.include_router(kitchen_router, prefix="/kitchen", tags=["Kitchen"])
 # ---------------------------------------------------------
 # Application Startup
 # ---------------------------------------------------------
-def _seed_master_account():
+def _seed_accounts():
     """
-    Optional first-run bootstrap for a fresh (empty) deploy: if
-    SEED_MASTER_PHONE/SEED_MASTER_NAME are set and no master account with
-    that phone exists yet, create one. Safe to leave the env vars set —
-    it no-ops once the account exists.
+    Optional first-run bootstrap for a fresh (empty) deploy — local SQLite
+    data is gitignored and Render's free tier has no persistent disk, so
+    every fresh deploy/restart starts with zero accounts.
+
+    SEED_MASTER_PHONE / SEED_MASTER_NAME: the single owner/master account.
+    SEED_STAFF: "Name:phone:role,Name:phone:role,..." for staff accounts
+    (role one of admin/manager/chef/staff). Safe to leave both set — each
+    entry no-ops once an account with that phone already exists.
     """
-    phone = os.getenv("SEED_MASTER_PHONE")
-    name = os.getenv("SEED_MASTER_NAME")
-    if not phone or not name:
-        return
-
-    from services.dependencies import sqlite_db
-    if sqlite_db.fetch_one("SELECT 1 FROM master WHERE phone = ?", (phone,)):
-        return
-
-    from routes.auth import generate_next_master_id
     import time
-    sqlite_db.insert("master", {
-        "master_id": generate_next_master_id(),
-        "name": name,
-        "phone": phone,
-        "is_active": 1,
-        "created_at": time.strftime("%d/%m/%Y %H:%M:%S"),
-    })
-    print(f"✅ Seeded master account for phone {phone}")
+    from services.dependencies import sqlite_db
+
+    master_phone = os.getenv("SEED_MASTER_PHONE")
+    master_name = os.getenv("SEED_MASTER_NAME")
+    if master_phone and master_name:
+        if not sqlite_db.fetch_one("SELECT 1 FROM master WHERE phone = ?", (master_phone,)):
+            from routes.auth import generate_next_master_id
+            sqlite_db.insert("master", {
+                "master_id": generate_next_master_id(),
+                "name": master_name,
+                "phone": master_phone,
+                "is_active": 1,
+                "created_at": time.strftime("%d/%m/%Y %H:%M:%S"),
+            })
+            print(f"✅ Seeded master account for phone {master_phone}")
+
+    staff_spec = os.getenv("SEED_STAFF")
+    if staff_spec:
+        from routes.auth import generate_next_staff_id
+        for entry in staff_spec.split(","):
+            parts = [p.strip() for p in entry.strip().split(":")]
+            if len(parts) != 3:
+                continue
+            name, phone, role = parts
+            if not name or not phone:
+                continue
+            if sqlite_db.fetch_one("SELECT 1 FROM staff WHERE phone = ?", (phone,)):
+                continue
+            sqlite_db.insert("staff", {
+                "staff_id": generate_next_staff_id(),
+                "name": name,
+                "phone": phone,
+                "role": role or "staff",
+                "is_active": 1,
+                "created_at": time.strftime("%d/%m/%Y %H:%M:%S"),
+            })
+            print(f"✅ Seeded staff account for phone {phone} ({role})")
 
 
 @app.on_event("startup")
@@ -125,7 +148,7 @@ async def startup_event():
     # Start the progressive sync worker to sync SQLite changes to Google Sheets
     asyncio.create_task(start_progressive_sync())
 
-    _seed_master_account()
+    _seed_accounts()
 
 # ---------------------------------------------------------
 # Health Check

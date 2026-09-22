@@ -19,7 +19,8 @@ class SQLiteClient:
         )
         self.conn.row_factory = sqlite3.Row
         self._setup_pragmas()
-        
+        self._bootstrap_schema()
+
         # Thread lock for thread-safe operations
         self.lock = threading.Lock()
         
@@ -33,6 +34,25 @@ class SQLiteClient:
         cursor.execute("PRAGMA synchronous=NORMAL;")
         cursor.execute("PRAGMA foreign_keys=ON;")
         cursor.close()
+
+    def _bootstrap_schema(self):
+        """
+        On a brand-new DB file (fresh deploy, empty filesystem) sqliteDB/*.db
+        is gitignored so no tables exist yet. Load schema.sql once so the app
+        doesn't crash the first time a route touches a table.
+        """
+        exists = self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='orders'"
+        ).fetchone()
+        if exists:
+            return
+
+        schema_path = os.path.join(os.path.dirname(self.db_path) or ".", "schema.sql")
+        if not os.path.isfile(schema_path):
+            return
+
+        with open(schema_path, "r") as f:
+            self.conn.executescript(f.read())
 
     def fetch_all(self, query: str, params: tuple = ()) -> list[dict]:
         """Fetch all rows for a query and return as a list of dicts."""

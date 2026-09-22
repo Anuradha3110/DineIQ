@@ -90,12 +90,42 @@ app.include_router(kitchen_router, prefix="/kitchen", tags=["Kitchen"])
 # ---------------------------------------------------------
 # Application Startup
 # ---------------------------------------------------------
+def _seed_master_account():
+    """
+    Optional first-run bootstrap for a fresh (empty) deploy: if
+    SEED_MASTER_PHONE/SEED_MASTER_NAME are set and no master account with
+    that phone exists yet, create one. Safe to leave the env vars set —
+    it no-ops once the account exists.
+    """
+    phone = os.getenv("SEED_MASTER_PHONE")
+    name = os.getenv("SEED_MASTER_NAME")
+    if not phone or not name:
+        return
+
+    from services.dependencies import sqlite_db
+    if sqlite_db.fetch_one("SELECT 1 FROM master WHERE phone = ?", (phone,)):
+        return
+
+    from routes.auth import generate_next_master_id
+    import time
+    sqlite_db.insert("master", {
+        "master_id": generate_next_master_id(),
+        "name": name,
+        "phone": phone,
+        "is_active": 1,
+        "created_at": time.strftime("%d/%m/%Y %H:%M:%S"),
+    })
+    print(f"✅ Seeded master account for phone {phone}")
+
+
 @app.on_event("startup")
 async def startup_event():
     import asyncio
     from services.DineIQ_Database_Sync import start_progressive_sync
     # Start the progressive sync worker to sync SQLite changes to Google Sheets
     asyncio.create_task(start_progressive_sync())
+
+    _seed_master_account()
 
 # ---------------------------------------------------------
 # Health Check
